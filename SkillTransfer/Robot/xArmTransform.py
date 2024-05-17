@@ -17,12 +17,12 @@ class xArmTransform_right:
     __initRoll, __initPitch, __initYaw = 180, 45, 90
 
     # ----- Minimum limitation ----- #
-    __minX, __minY, __minZ = 310, -300, 225
-    __minRoll, __minPitch, __minYaw = -90, -65, -90
+    __minX, __minY, __minZ = -999, -999, -999
+    __minRoll, __minPitch, __minYaw = -180, -180, -180
 
     # ----- Maximum limitation ----- #
-    __maxX, __maxY, __maxZ = 650, 300, 650
-    __maxRoll, __maxPitch, __maxYaw = 90, 70, 90
+    __maxX, __maxY, __maxZ = 999, 999, 999
+    __maxRoll, __maxPitch, __maxYaw = 180, 180, 180
 
     def __init__(self):
         self.n = 4
@@ -33,13 +33,6 @@ class xArmTransform_right:
 
         self.beforefilt = [[0, 0, 0, 0, 0, 0]] * self.n
         self.afterfilt = [[0, 0, 0, 0, 0, 0]] * self.n
-
-        fileIO = FileIO()
-
-        dat = fileIO.Read("settings.csv", ",")
-        xArmIP1 = [addr for addr in dat if "xArmIPAddress1" in addr[0]][0][1]
-        xArmIP2 = [addr for addr in dat if "xArmIPAddress2" in addr[0]][0][1]
-        self.xArmIpAddress2 = xArmIP2
 
     def SetInitialTransform(self, initX, initY, initZ, initRoll, initPitch, initYaw):
         """
