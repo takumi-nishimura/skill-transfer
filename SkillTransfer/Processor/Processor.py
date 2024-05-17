@@ -43,20 +43,11 @@ recordedGripperValueCount = 0  # Number of gripper data of pre recorded
 motionDataInputMode = "optitrack"
 gripperDataInputMode = "bendingsensor"
 
-# ---------- Settings: Shared method ---------- #
-sharedMethod = "integration"
-
-# ---------- Settings: Direction of participants ---------- #
-directionOfParticipants = "same"
-oppositeParticipants = ["participant1"]
-# oppositeParticipants    = ['participant1', 'participant2']
-inversedAxes = ["y", "z"]
-
 # ----- Safety settings. Unit: [mm] ----- #
 movingDifferenceLimit = 500
 
 
-class RobotControlManagerClass:
+class ProcessorClass:
     def __init__(self) -> None:
         fileIO = FileIO()
 
@@ -108,41 +99,9 @@ class RobotControlManagerClass:
         self.condition = "1"
         self.number = "1"
 
-    def mainloop(
-        self,
-        isFixedFrameRate: bool = False,
-        isChangeOSTimer: bool = False,
-        isExportData: bool = True,
-        isEnablexArm: bool = True,
-    ):
+    def mainloop(self, isFixedFrameRate: bool = False, isChangeOSTimer: bool = False, isExportData: bool = True, isEnablexArm: bool = True):
         """
         Send the position and rotation to the xArm
-
-        Parameters
-        ----------
-        participantNum: int
-            Number of participants
-        executionTime: (Optional) int
-            Unit: [s]
-            Execution time
-        isFixedFrameRate: (Optional) bool
-            Use fixed frame rate.
-            Default is depending on the PC specs.
-        frameRate: (Optional) int
-            Frame rate of the loop of this method
-        isChangeOSTimer: (Optional, only for Windows) bool
-            Change the Windows OS timer.
-            ----- CAUTION -----
-                Since this option changes the OS timer, it will affect the performance of other programs.
-                Ref: https://python-ai-learn.com/2021/02/07/time/
-                Ref: https://docs.microsoft.com/en-us/windows/win32/api/timeapi/nf-timeapi-timebeginperiod
-        isExportData: (Optional) bool
-            Export recorded data.
-            Participants' motion data (Position: xyz, Quaternion: xyzw)
-            Other rigid bodys' motion data (Position: xyz, Quaternion: xyzw)
-            Gripper value.
-        isEnablexArm: (Optional) bool
-            For debug mode. If False, xArm will not be enabled.
         """
 
         # ----- Change OS timer ----- #
