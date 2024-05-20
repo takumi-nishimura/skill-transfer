@@ -1,15 +1,12 @@
 import csv
 import threading
 import time
-
 import numpy as np
 
-from BendingSensor.BendingSensorManager import BendingSensorManager
-from MotionFilter.MotionFilter import MotionFilter
+from Gripper.Gripper import BendingSensorManager
+from Filter.Filter import MotionFilter
 from OptiTrack.OptiTrackStreaming import OptiTrackStreamingManager
-
-# ----- Custom class ----- #
-from UDP.UDPManager import UDPManager
+from Gripper.UDP import UDPManager
 
 # ----- Numeric range remapping ----- #
 targetMin = 150
@@ -17,33 +14,12 @@ targetMax = 850
 originalMin = 0
 originalMax = 1
 
-# ----- For many bendingsensors (Arduinoの値を見て変更) ----- #
-# bendingSensorMin = [1600,2000]
-# bendingSensorMax = [2400,2500]
-
-# ----- Settings: Recorded motion data ----- #
-recordedMotionPath = "RecordedMotion/"
-recordedMotionFileName = "Transform_Participant_"
-recordedGripperValueFileName = "GripperValue_"
-
-
-class ParticipantMotionManager:
-    def __init__(
-        self,
-        defaultParticipantNum: int,
-        motionInputSystem: str = "optitrack",
-        mocapServer: str = "",
-        mocapLocal: str = "",
-        gripperInputSystem: str = "bendingsensor",
-        bendingSensorNum: int = 1,
-        BendingSensor_ConnectionMethod: str = "wireless",
-        recordedGripperValueNum: int = 0,
-        bendingSensorUdpIpAddress: str = "192.168.80.142",
-        bendingSensorUdpPort: list = [9000, 9001],
-        bendingSensorSerialCOMs: list = [],
-    ) -> None:
+class ParticipantMotion:
+    def __init__(self, defaultParticipantNum: int, otherRigidBodyNum: int, motionInputSystem: str = "optitrack", mocapServer: str = "", mocapLocal: str = "", gripperInputSystem: str = "bendingsensor",
+        bendingSensorNum: int = 1, BendingSensor_ConnectionMethod: str = "wireless", recordedGripperValueNum: int = 0, bendingSensorUdpIpAddress: str = "192.168.80.142", bendingSensorUdpPort: list = [9000, 9001], bendingSensorSerialCOMs: list = []) -> None:
 
         self.defaultParticipantNum = defaultParticipantNum
+        self.otherRigidBodyNum = otherRigidBodyNum
         self.motionInputSystem = motionInputSystem
         self.gripperInputSystem = gripperInputSystem
         self.bendingSensorNum = bendingSensorNum
@@ -67,16 +43,10 @@ class ParticipantMotionManager:
 
         # ----- Initialize participants' motion input system ----- #
         if motionInputSystem == "optitrack":
-            self.optiTrackStreamingManager = OptiTrackStreamingManager(
-                defaultParticipantNum=defaultParticipantNum,
-                mocapServer=mocapServer,
-                mocapLocal=mocapLocal,
-            )
+            self.optiTrackStreamingManager = OptiTrackStreamingManager(defaultParticipantNum=defaultParticipantNum, otherRigidBodyNum=self.otherRigidBodyNum, mocapServer=mocapServer, mocapLocal=mocapLocal)
 
             # ----- Start streaming from OptiTrack ----- #
-            streamingThread = threading.Thread(
-                target=self.optiTrackStreamingManager.stream_run
-            )
+            streamingThread = threading.Thread(target=self.optiTrackStreamingManager.stream_run)
             streamingThread.setDaemon(True)
             streamingThread.start()
 
@@ -94,17 +64,11 @@ class ParticipantMotionManager:
                 self.port = bendingSensorUdpPort
 
             for i in range(bendingSensorNum):
-                bendingSensorManager = BendingSensorManager(
-                    BendingSensor_connectionmethod=BendingSensor_ConnectionMethod,
-                    ip=self.ip[i],
-                    port=self.port[i],
-                )
+                bendingSensorManager = BendingSensorManager(BendingSensor_connectionmethod=BendingSensor_ConnectionMethod, ip=self.ip[i], port=self.port[i])
                 self.bendingSensors.append(bendingSensorManager)
 
                 # ----- Start receiving bending sensor value from UDP socket ----- #
-                bendingSensorThread = threading.Thread(
-                    target=bendingSensorManager.StartReceiving
-                )
+                bendingSensorThread = threading.Thread(target=bendingSensorManager.StartReceiving)
                 bendingSensorThread.setDaemon(True)
                 bendingSensorThread.start()
 
@@ -183,70 +147,48 @@ class ParticipantMotionManager:
         {'gripperValue1': float value}
         """
 
-        if self.gripperInputSystem == "bendingsensor":
-            dictGripperValue = {}
-            dictbendingVal = {}
-            for i in range(self.bendingSensorNum):
-                dictbendingVal["gripperValue" + str(i + 1)] = self.bendingSensors[
-                    i
-                ].bendingValue
+        sharedGripper_left = []
+        sharedGripper_right = []
 
-            if self.bendingSensorNum == 2:
-                bendingValueNorm1 = dictbendingVal["gripperValue1"]
-                print(bendingValueNorm1)
-                bendingValueNorm2 = dictbendingVal["gripperValue2"]
-            elif self.bendingSensorNum == 4:
-                bendingValueNorm1 = (
-                    dictbendingVal["gripperValue1"] * weight[0]
-                    + dictbendingVal["gripperValue3"] * weight[2]
-                )
-                bendingValueNorm2 = (
-                    dictbendingVal["gripperValue2"] * weight[1]
-                    + dictbendingVal["gripperValue4"] * weight[3]
-                )
-            elif self.bendingSensorNum == 6:
-                bendingValueNorm1 = (
-                    dictbendingVal["gripperValue1"] * weight[0]
-                    + dictbendingVal["gripperValue3"] * weight[2]
-                    + dictbendingVal["gripperValue5"] * weight[4]
-                )
-                bendingValueNorm2 = (
-                    dictbendingVal["gripperValue2"] * weight[1]
-                    + dictbendingVal["gripperValue4"] * weight[3]
-                    + dictbendingVal["gripperValue6"] * weight[5]
-                )
+        dictGripperValue = {}
+        dictbendingVal = {}
+            
+        for i in range(self.bendingSensorNum):
+            dictbendingVal["gripperValue" + str(i + 1)] = self.bendingSensors[i].bendingValue
 
-            GripperValue1 = bendingValueNorm1 * (targetMax - targetMin) + targetMin
-            GripperValue2 = bendingValueNorm2 * (targetMax - targetMin) + targetMin
+            if i % 2 == 0:
+                sharedGripper_left += dictbendingVal * weight[i]
+            
+            elif i % 2 == 1:
+                sharedGripper_right += dictbendingVal * weight[i]
 
-            if GripperValue1 > targetMax:
-                GripperValue1 = targetMax
-            if GripperValue2 > targetMax:
-                GripperValue2 = targetMax
-            if GripperValue1 < targetMin:
-                GripperValue1 = targetMin
-            if GripperValue2 < targetMin:
-                GripperValue2 = targetMin
+        GripperValue1 = sharedGripper_left * (targetMax - targetMin) + targetMin
+        GripperValue2 = sharedGripper_right * (targetMax - targetMin) + targetMin
 
-            # ----- lowpass filter for gripper1 ----- #
-            self.get_gripperValue_1_box.append([GripperValue1])
-            get_gripperValue_1_filt = self.filter_FB.lowpass2(
-                self.get_gripperValue_1_box, self.get_gripperValue_1_filt_box
-            )
-            self.get_gripperValue_1_filt_box.append(get_gripperValue_1_filt)
-            del self.get_gripperValue_1_box[0]
-            del self.get_gripperValue_1_filt_box[0]
+        if GripperValue1 > targetMax:
+            GripperValue1 = targetMax
+        if GripperValue2 > targetMax:
+            GripperValue2 = targetMax
+        if GripperValue1 < targetMin:
+            GripperValue1 = targetMin
+        if GripperValue2 < targetMin:
+            GripperValue2 = targetMin
 
-            # ----- lowpass filter for gripper2 ----- #
-            self.get_gripperValue_2_box.append([GripperValue2])
-            get_gripperValue_2_filt = self.filter_FB.lowpass2(
-                self.get_gripperValue_2_box, self.get_gripperValue_2_filt_box
-            )
-            self.get_gripperValue_2_filt_box.append(get_gripperValue_2_filt)
-            del self.get_gripperValue_2_box[0]
-            del self.get_gripperValue_2_filt_box[0]
+        # ----- lowpass filter for left ----- #
+        self.get_gripperValue_1_box.append([GripperValue1])
+        get_gripperValue_1_filt = self.filter_FB.lowpass2(self.get_gripperValue_1_box, self.get_gripperValue_1_filt_box)
+        self.get_gripperValue_1_filt_box.append(get_gripperValue_1_filt)
+        del self.get_gripperValue_1_box[0]
+        del self.get_gripperValue_1_filt_box[0]
 
-            dictGripperValue["gripperValue1"] = get_gripperValue_1_filt
-            dictGripperValue["gripperValue2"] = get_gripperValue_2_filt
+        # ----- lowpass filter for right ----- #
+        self.get_gripperValue_2_box.append([GripperValue2])
+        get_gripperValue_2_filt = self.filter_FB.lowpass2(self.get_gripperValue_2_box, self.get_gripperValue_2_filt_box)
+        self.get_gripperValue_2_filt_box.append(get_gripperValue_2_filt)
+        del self.get_gripperValue_2_box[0]
+        del self.get_gripperValue_2_filt_box[0]
+
+        dictGripperValue["gripperValue1"] = get_gripperValue_1_filt
+        dictGripperValue["gripperValue2"] = get_gripperValue_2_filt
 
         return dictGripperValue, dictbendingVal

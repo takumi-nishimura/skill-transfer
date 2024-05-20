@@ -46,9 +46,9 @@ class DataRecordManager:
             self.dictWeightPosition["participant" + str(i + 1)] = []
             self.dictWeightRotation["participant" + str(i + 1)] = []
 
-        # for i in range(self.otherRigidBodyNum):
-        #     self.dictPosition["participant" + str(i + 3)] = []
-        #     self.dictRotation["participant" + str(i + 4)] = []
+        for i in range(self.otherRigidBodyNum):
+            self.dictPosition["otherRigidBody" + str(i + 1)] = []
+            self.dictRotation["otherRigidBody" + str(i + 1)] = []
 
         for i in range(self.bendingSensorNum):
             self.dictGripperValue_P["gripperValue_P" + str(i + 1)] = []
@@ -82,15 +82,15 @@ class DataRecordManager:
 
         self.dictDurationTime.append([duration])
 
-        for i in range(self.participantNum - 2):
+        for i in range(self.participantNum):
             self.dictPosition["participant" + str(i + 1)].append(position["participant" + str(i + 1)])
             self.dictRotation["participant" + str(i + 1)].append(rotation["participant" + str(i + 1)])
             self.dictWeightPosition["participant" + str(i + 1)].append(weight[0][i])
             self.dictWeightRotation["participant" + str(i + 1)].append(weight[1][i])
 
         for i in range(self.otherRigidBodyNum):
-            self.dictPosition["participant" + str(i + 3)].append(position["participant" + str(i + 3)])
-            self.dictRotation["participant" + str(i + 3)].append(rotation["participant" + str(i + 3)])
+            self.dictPosition["otherRigidBody" + str(i + 1)].append(position["otherRigidBody" + str(i + 1)])
+            self.dictRotation["otherRigidBody" + str(i + 1)].append(rotation["otherRigidBody" + str(i + 1)])
 
         for i in range(self.bendingSensorNum):
             self.dictGripperValue_P["gripperValue_P" + str(i + 1)].append([Gripper_P["gripperValue" + str(i + 1)]])
@@ -120,7 +120,7 @@ class DataRecordManager:
 
         print("\n---------- DataRecordManager.ExportSelf ----------")
         print("Writing: Participant transform...")
-        for i in tqdm.tqdm(range(self.participantNum - 2), ncols=150):
+        for i in tqdm.tqdm(range(self.participantNum), ncols=150):
             npDuration = np.array(self.dictDurationTime)
             npPosition = np.array(self.dictPosition["participant" + str(i + 1)])
             npRotation = np.array(self.dictRotation["participant" + str(i + 1)])
@@ -133,8 +133,8 @@ class DataRecordManager:
         print("Writing: Other rigid body transform...")
         for i in tqdm.tqdm(range(self.otherRigidBodyNum), ncols=150):
             npDuration = np.array(self.dictDurationTime)
-            npPosition = np.array(self.dictPosition["participant" + str(i + 3)])
-            npRotation = np.array(self.dictRotation["participant" + str(i + 3)])
+            npPosition = np.array(self.dictPosition["otherRigidBody" + str(i + 1)])
+            npRotation = np.array(self.dictRotation["otherRIgidBody" + str(i + 1)])
             npRigidBodyTransform = np.concatenate([npPosition, npRotation], axis=1)
             npTimeRigidBodyTransform = np.c_[npDuration, npRigidBodyTransform]
             self.ExportAsCSV(npTimeRigidBodyTransform, dirPath, "OtherRigidBody_" + str(i + 1), participant, conditions, number, transformHeader)

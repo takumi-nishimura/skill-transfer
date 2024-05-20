@@ -11,38 +11,38 @@ import time
 from ctypes import windll
 from datetime import datetime
 from enum import Flag
+from turtle import right
 
 import numpy as np
 from cv2 import transform
 from matplotlib.pyplot import flag
 
 # ----- Custom class ----- #
-from BendingSensor.BendingSensorManager import BendingSensorManager
-from CyberneticAvatarMotion.CyberneticAvatarMotionBehaviour import CyberneticAvatarMotionBehaviour
-from CyberneticAvatarMotion.CyberneticAvatarMotionBehaviour import CyberneticAvatarMotionBehaviour
+from Gripper.Gripper import BendingSensorManager
+from Robot.CAMotion import CAMotion
 from FileIO.FileIO import FileIO
-from Graph.Graph_2D import Graph_2D
-from LoadCell.LoadCellManager import LoadCellManager
-from Participant.ParticipantMotion import ParticipantMotionManager
+from Participant.ParticipantMotion import ParticipantMotion
 from Recorder.DataRecord import DataRecordManager
-from RobotArmController.xArmTransform import xArmTransform_left,xArmTransform_right
+from Robot.xArmTransform import xArmTransform
 from xarm.wrapper import XArmAPI
 
 # ---------- Settings: Input mode ---------- #
 motionDataInputMode = "optitrack"
 gripperDataInputMode = "bendingsensor"
 
-# ----- Safety settings. Unit: [mm] ----- #
-movingDifferenceLimit = 500
-
 class ProcessorClass:
     def __init__(self) -> None:
         fileIO = FileIO()
         dat = fileIO.Read("settings.csv", ",")
 
-        # ----- extraction ----- #
-        xArmIP1 = [addr for addr in dat if "xArmIPAddress1" in addr[0]][0][1]
-        xArmIP2 = [addr for addr in dat if "xArmIPAddress2" in addr[0]][0][1]
+        xArmIP_left = [addr for addr in dat if "xArmIPAddress_left" in addr[0]][0][1]
+        initialpos_left = [addr for addr in dat if "initialpos_left," in addr[0]]
+        initialrot_left = [addr for addr in dat if "initialrot_left," in addr[0]]
+
+        xArmIP_right = [addr for addr in dat if "xArmIPAddress_right" in addr[0]][0][1]
+        initialpos_right = [addr for addr in dat if "initialpos_right," in addr[0]]
+        initialrot_right = [addr for addr in dat if "initialrot_right," in addr[0]]
+        
         wirelessIP = [addr for addr in dat if "wirelessIPAddress" in addr[0]][0][1]
         localIP = [addr for addr in dat if "localIPAddress" in addr[0]][0][1]
         motiveserverIP = [addr for addr in dat if "motiveServerIPAddress" in addr[0]][0][1]
@@ -70,12 +70,18 @@ class ProcessorClass:
         otherRigidBodyNum = [addr for addr in dat if "otherRigidBodyNum" in addr[0]][0][1]
         robotNum = [addr for addr in dat if "robotNum" in addr[0]][0][1]
 
-        weightSliderListPos = [addr for addr in dat if "weightSliderListPos" in addr[0]]
-        weightSliderListRot = [addr for addr in dat if "weightSliderListRot" in addr[0]]
+        weightListPos = [addr for addr in dat if "weightListPos" in addr[0]]
+        weightListRot = [addr for addr in dat if "weightListRot" in addr[0]]
         weightGripperList = [addr for addr in dat if "weightGripperList" in addr[0]]
 
-        self.xArmIpAddress1 = xArmIP1
-        self.xArmIpAddress2 = xArmIP2
+        self.xArmIpAddress_left = xArmIP_left
+        self.initialpos_left = initialpos_left
+        self.initislrot_left = initialrot_left
+
+        self.xArmIpAddress_right = xArmIP_right
+        self.initialpos_right = initialpos_right
+        self.initislrot_right = initialrot_right
+        
         self.wirelessIpAddress = wirelessIP
         self.localIpAddress = localIP
         self.motiveserverIpAddress = motiveserverIP
@@ -92,8 +98,8 @@ class ProcessorClass:
         self.otherRigidBodyNum = otherRigidBodyNum
         self.robotNum = robotNum
 
-        self.weightSliderListPos = weightSliderListPos
-        self.weightSliderListRot = weightSliderListRot
+        self.weightListPos = weightListPos
+        self.weightListRot = weightListRot
         self.weightGripperList = weightGripperList
 
         self.participantname = "卒論"
@@ -126,30 +132,19 @@ class ProcessorClass:
             print("Use fixed frame rate > " + str(self.frameRate) + "[fps]")
 
         # ----- Instantiating custom classes ----- #
-        caBehaviour = CyberneticAvatarMotionBehaviour(defaultParticipantNum=self.participantNum)
-        transform_1 = xArmTransform_left()
-        transform_2 = xArmTransform_right()
+        caMotion = CAMotion(defaultParticipantNum=self.participantNum, otherRigidBodyNum=self.otherRigidBodyNum)
+        transform_left = xArmTransform(initpos=self.initialpos_left, initrot=self.initislrot_left, mount="left")
+        transform_right = xArmTransform(initpos=self.initialpos_right, initrot=self.initislrot_right, mount="right")
         dataRecordManager = DataRecordManager(participantNum=self.participantNum, otherRigidBodyNum=self.otherRigidBodyNum, bendingSensorNum=self.gripperNum, robotNum=self.robotNum)
-        participantMotionManager = ParticipantMotionManager(
-            defaultParticipantNum=self.participantNum,
-            motionInputSystem=motionDataInputMode,
-            mocapServer=self.motiveserverIpAddress,
-            mocapLocal=self.motivelocalIpAddress,
-            gripperInputSystem=gripperDataInputMode,
-            bendingSensorNum=self.gripperNum,
-            BendingSensor_ConnectionMethod="wired",
-            bendingSensorUdpIpAddress=self.wirelessIpAddress,
-            bendingSensorUdpPort=self.bendingSensorPorts,
-            bendingSensorSerialCOMs=self.bendingSensorComs,
-        )
+        participantMotion = ParticipantMotion(defaultParticipantNum=self.participantNum, otherRigidBodyNum=self.otherRigidBodyNum, motionInputSystem=motionDataInputMode, mocapServer=self.motiveserverIpAddress, mocapLocal=self.motivelocalIpAddress, gripperInputSystem=gripperDataInputMode, bendingSensorNum=self.gripperNum, BendingSensor_ConnectionMethod="wired", bendingSensorUdpIpAddress=self.wirelessIpAddress, bendingSensorUdpPort=self.bendingSensorPorts, bendingSensorSerialCOMs=self.bendingSensorComs)
 
         # ----- Initialize robot arm ----- #
         if isEnablexArm:
-            arm_1 = XArmAPI(self.xArmIpAddress1)
-            self.InitializeAll(arm_1, transform_1)
+            arm_1 = XArmAPI(self.xArmIpAddress_left)
+            self.InitializeAll(arm_1, transform_left)
 
-            arm_2 = XArmAPI(self.xArmIpAddress2)
-            self.InitializeAll(arm_2, transform_2)
+            arm_2 = XArmAPI(self.xArmIpAddress_right)
+            self.InitializeAll(arm_2, transform_right)
 
         # ----- Control flags ----- #
         isMoving = False
@@ -161,73 +156,46 @@ class ProcessorClass:
                     loopStartTime = time.perf_counter()
 
                     # ----- Get transform data----- #
-                    localPosition = participantMotionManager.LocalPosition(loopCount=self.loopCount)
-                    localRotation = participantMotionManager.LocalRotation(loopCount=self.loopCount)
+                    localPosition = participantMotion.LocalPosition(loopCount=self.loopCount)
+                    localRotation = participantMotion.LocalRotation(loopCount=self.loopCount)
 
-                    robotpos, robotrot = caBehaviour.DualArmTransform2(localPosition, localRotation, weightSliderList)
-                    position_1, rotation_1, position_2, rotation_2 = robotpos["robot1"], robotrot["robot1"], robotpos["robot2"],robotrot["robot2"]
+                    relativePosition = caMotion.GetRelativePosition(position=localPosition)
+                    relativeRotation = caMotion.GetRelativeRotation(rotation=localRotation)
 
-                    position_1 = position_1 * 1000
-                    position_2 = position_2 * 1000
-
-                    # ----- Set xArm transform ----- #
-                    transform_1.x, transform_1.y, transform_1.z = position_1[2], -1 * position_1[1], position_1[0]
-                    transform_1.roll, transform_1.pitch, transform_1.yaw = rotation_1[0], -1 * rotation_1[2], rotation_1[1]
-
-                    transform_2.x, transform_2.y, transform_2.z = position_2[2], position_2[1], -1 * position_2[0]
-                    transform_2.roll, transform_2.pitch, transform_2.yaw = rotation_2[0], -1 * rotation_2[2], rotation_2[1]
+                    robotpos, robotrot = caMotion.participant2robot(relativePosition, relativeRotation, weightList)
 
                     if isEnablexArm:
                         # ----- Send to xArm ----- #
-                        arm_1.set_servo_cartesian(transform_1.Transform(isLimit=False, isOnlyPosition=False))
-                        arm_2.set_servo_cartesian(transform_2.Transform(isLimit=False, isOnlyPosition=False))
+                        arm_1.set_servo_cartesian(transform_left.Transform(relativepos=robotpos["robot1"], relativerot=robotrot["robot1"], isLimit=False))
+                        arm_2.set_servo_cartesian(transform_right.Transform(relativepos=robotpos["robot2"], relativerot=robotrot["robot2"], isLimit=False))
 
                     # ----- Bending sensor ----- #
-                    dictGripperValue_R, dictGripperValue_P = (participantMotionManager.GripperControlValue(weight=weightGripperList, loopCount=self.loopCount))
-                    gripperValue_1 = dictGripperValue_R["gripperValue1"]
-                    gripperValue_2 = dictGripperValue_R["gripperValue2"]
+                    dictGripperValue_R, dictGripperValue_P = (participantMotion.GripperControlValue(weight=weightGripperList, loopCount=self.loopCount))
 
                     # ----- Gripper control ----- #
                     if isEnablexArm:
-                        code_1, ret_1 = arm_1.getset_tgpio_modbus_data(self.ConvertToModbusData(gripperValue_1))
-                        code_2, ret_2 = arm_2.getset_tgpio_modbus_data(self.ConvertToModbusData(gripperValue_2))
+                        code_1, ret_1 = arm_1.getset_tgpio_modbus_data(self.ConvertToModbusData(dictGripperValue_R["gripperValue1"]))
+                        code_2, ret_2 = arm_2.getset_tgpio_modbus_data(self.ConvertToModbusData(dictGripperValue_R["gripperValue2"]))
 
                     # ----- Data recording ----- #
                     if isExportData:
-                        relativePosition = caBehaviour.GetRelativePosition(position=localPosition)
-                        relativeRotation = caBehaviour.GetRelativeRotation(rotation=localRotation)
-                        dataRecordManager.Record(
-                            relativePosition,
-                            relativeRotation,
-                            weightSliderList,
-                            dictGripperValue_P,
-                            robotpos,
-                            robotrot,
-                            dictGripperValue_R,
-                            time.perf_counter() - taskStartTime,
-                        )
+                        dataRecordManager.Record(relativePosition, relativeRotation, weightList, dictGripperValue_P, robotpos, robotrot, dictGripperValue_R, time.perf_counter() - taskStartTime)
 
                     # ----- If xArm error has occured ----- #
                     if isEnablexArm and arm_1.has_err_warn:
                         isMoving = False
                         self.errorCount += 1
                         self.taskTime.append(time.perf_counter() - taskStartTime)
-                        print(
-                            '[ERROR] >> xArm Error has occured. Please enter "r" to reset xArm, or "q" to quit'
-                        )
+                        print('[ERROR] >> xArm Error has occured. Please enter "r" to reset xArm, or "q" to quit')
 
                     if isEnablexArm and arm_2.has_err_warn:
                         isMoving = False
                         self.errorCount += 1
                         self.taskTime.append(time.perf_counter() - taskStartTime)
-                        print(
-                            '[ERROR] >> xArm Error has occured. Please enter "r" to reset xArm, or "q" to quit'
-                        )
+                        print('[ERROR] >> xArm Error has occured. Please enter "r" to reset xArm, or "q" to quit')
 
                     # ---------- End control process timer ---------- #
-                    processDuration = (
-                        time.perf_counter() - loopStartTime
-                    )  # For loop timer
+                    processDuration = time.perf_counter() - loopStartTime
 
                     # ----- Fixed frame rate ----- #
                     if isFixedFrameRate:
@@ -240,9 +208,7 @@ class ProcessorClass:
                     self.loopCount += 1
 
                 else:
-                    keycode = input(
-                        'Input > "q": quit, "r": Clean error and init arm, "s": start control \n'
-                    )
+                    keycode = input('Input > "q": quit, "r": Clean error and init arm, "s": start control \n')
                     # ----- Quit program ----- #
                     if keycode == "q":
                         if isEnablexArm:
@@ -256,81 +222,44 @@ class ProcessorClass:
                     # ----- Reset xArm and gripper ----- #
                     elif keycode == "r":
                         if isEnablexArm:
-                            self.InitializeAll(arm_1, transform_1)
-                            self.InitializeAll(arm_2, transform_2)
+                            self.InitializeAll(arm_1, transform_left)
+                            self.InitializeAll(arm_2, transform_right)
                             # self.InitRobotArm(arm, transform)
                             # self.InitGripper(arm)
 
                     # ----- Start streaming ----- #
                     elif keycode == "s":
-                        caBehaviour.SetOriginPosition(
-                            participantMotionManager.LocalPosition()
-                        )
-                        caBehaviour.SetInversedMatrix(
-                            participantMotionManager.LocalRotation()
-                        )
+                        caMotion.SetOriginPosition(participantMotion.LocalPosition())
+                        caMotion.SetInversedMatrix(participantMotion.LocalRotation())
 
                         # ----- weight slider list ----- #
-                        self.weightSliderListPos[0].remove("weightSliderListPos")
-                        self.weightSliderListRot[0].remove("weightSliderListRot")
-                        weightSliderListPosstr = self.weightSliderListPos[0]
-                        weightSliderListRotstr = self.weightSliderListRot[0]
-                        weightSliderListPosfloat = list(
-                            map(float, weightSliderListPosstr)
-                        )
-                        weightSliderListRotfloat = list(
-                            map(float, weightSliderListRotstr)
-                        )
-                        weightSliderList = [
-                            weightSliderListPosfloat,
-                            weightSliderListRotfloat,
-                        ]
+                        self.weightListPos[0].remove("weightListPos")
+                        self.weightListRot[0].remove("weightListRot")
+                        weightListPosstr = self.weightListPos[0]
+                        weightListRotstr = self.weightListRot[0]
+                        weightListPosfloat = list(map(float, weightListPosstr))
+                        weightListRotfloat = list(map(float, weightListRotstr))
+                        weightList = [weightListPosfloat,weightListRotfloat]
 
                         # ----- weight slider list ----- #
                         self.weightGripperList[0].remove("weightGripperList")
                         weightGripperListstr = self.weightGripperList[0]
                         weightGripperList = list(map(float, weightGripperListstr))
 
-                        robotpos, robotrot = caBehaviour.DualArmTransform2(
-                            participantMotionManager.LocalPosition(),
-                            participantMotionManager.LocalRotation(),
-                            weightSliderList,
-                        )
-                        print(weightSliderList)
-                        position_1, rotation_1, position_2, rotation_2 = (
-                            robotpos["robot1"],
-                            robotrot["robot1"],
-                            robotpos["robot2"],
-                            robotrot["robot2"],
-                        )
-                        beforeX_1, beforeY_1, beforeZ_1 = (
-                            position_1[2],
-                            -1 * position_1[1],
-                            position_1[0],
-                        )
-                        beforeX_2, beforeY_2, beforeZ_2 = (
-                            position_2[2],
-                            position_2[1],
-                            -1 * position_2[0],
-                        )
-                        participantMotionManager.SetInitialBendingValue()
+                        robotpos, robotrot = caMotion.participant2robot(participantMotion.LocalPosition(), participantMotion.LocalRotation(), weightList)
+                        participantMotion.SetInitialBendingValue()
 
                         isMoving = True
                         taskStartTime = time.perf_counter()
 
         except KeyboardInterrupt:
-            print("\nKeyboardInterrupt >> Stop: RobotControlManager.SendDataToRobot()")
+            print("\nKeyboardInterrupt >> Stop: mainloop()")
 
             self.taskTime.append(time.perf_counter() - taskStartTime)
             self.PrintProcessInfo()
 
             if isExportData:
-                dataRecordManager.ExportSelf(
-                    dirPath=self.dirPath,
-                    participant=self.participantname,
-                    conditions=self.condition,
-                    number=self.number,
-                )
+                dataRecordManager.ExportSelf(dirPath=self.dirPath, participant=self.participantname, conditions=self.condition, number=self.number)
 
             # ----- Disconnect ----- #
             if isEnablexArm:
@@ -345,71 +274,6 @@ class ProcessorClass:
             import traceback
 
             traceback.print_exc()
-
-    def InitRobotArm(self, robotArm, transform, isSetInitPosition=True):
-        """
-        Initialize the xArm
-
-        Parameters
-        ----------
-        robotArm: XArmAPI
-            XArmAPI object.
-        transform: xArmTransform
-            xArmTransform object.
-        isSetInitPosition: (Optional) bool
-            True -> Set to "INITIAL POSITION" of the xArm studio
-            False -> Set to "ZERO POSITION" of the xArm studio
-        """
-
-        robotArm.connect()
-        robotArm.motion_enable(enable=True)
-        robotArm.set_mode(0)  # set mode: position control mode
-        robotArm.set_state(state=0)  # set state: sport state
-
-        if isSetInitPosition:
-            robotArm.clean_error()
-            robotArm.clean_warn()
-            initX, initY, initZ, initRoll, initPitch, initYaw = (
-                transform.GetInitialTransform()
-            )
-            robotArm.set_position(
-                x=initX,
-                y=initY,
-                z=initZ,
-                roll=initRoll,
-                pitch=initPitch,
-                yaw=initYaw,
-                wait=True,
-            )
-        else:
-            robotArm.reset(wait=True)
-
-        robotArm.motion_enable(enable=True)
-        robotArm.set_mode(1)
-        robotArm.set_state(state=0)
-
-        time.sleep(0.5)
-        print("Initialized > xArm")
-
-    def InitGripper(self, robotArm):
-        """
-        Initialize the gripper
-
-        Parameters
-        ----------
-        robotArm: XArmAPI
-            XArmAPI object.
-        """
-
-        robotArm.set_tgpio_modbus_baudrate(2000000)
-        robotArm.set_gripper_mode(0)
-        robotArm.set_gripper_enable(True)
-        robotArm.set_gripper_position(0, speed=5000)
-
-        robotArm.getset_tgpio_modbus_data(self.ConvertToModbusData(425))
-
-        time.sleep(0.5)
-        print("Initialized > xArm gripper")
 
     def ConvertToModbusData(self, value: int):
         """
@@ -480,18 +344,8 @@ class ProcessorClass:
         robotArm.set_mode(0)  # set mode: position control mode
         robotArm.set_state(state=0)  # set state: sport state
         if isSetInitPosition:
-            initX, initY, initZ, initRoll, initPitch, initYaw = (
-                transform.GetInitialTransform()
-            )
-            robotArm.set_position(
-                x=initX,
-                y=initY,
-                z=initZ,
-                roll=initRoll,
-                pitch=initPitch,
-                yaw=initYaw,
-                wait=True,
-            )
+            initX, initY, initZ, initRoll, initPitch, initYaw = transform.GetInitialTransform()
+            robotArm.set_position(x=initX, y=initY, z=initZ, roll=initRoll, pitch=initPitch, yaw=initYaw, wait=True)
         else:
             robotArm.reset(wait=True)
         print("Initialized > xArm")

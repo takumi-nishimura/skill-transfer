@@ -1,5 +1,11 @@
-xArmIPAddress1,192.168.1.244
-xArmIPAddress2,192.168.1.199
+xArmIPAddress_left,192.168.1.244
+initialpos_left,300,200,150
+initialrot_left,180,-45,90
+
+xArmIPAddress_right,192.168.1.199
+initialpos_right,300,-200,150
+initialrot_right,180,45,90
+
 motiveServerIPAddress,133.68.108.109
 motiveLocalIPAddress,133.68.108.109
 wirelessIPAddress,192.168.11.5
@@ -27,6 +33,6 @@ gripperNum,
 otherRigidBodyNum,
 robotNum,
 
-weightSliderListPos,0,1,0,0,0,0
-weightSliderListRot,0,1,0,0,0,0
+weightListPos,0,1,0,0,0,0
+weightListRot,0,1,0,0,0,0
 weightGripperList,1,1,0,0,0,0
